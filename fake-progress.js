@@ -27,3 +27,4 @@
 // day 5 progress
 // day 4 progress
 // day 3 progress
+// day 2 progress
