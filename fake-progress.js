@@ -28,3 +28,4 @@
 // day 4 progress
 // day 3 progress
 // day 2 progress
+// day 1 progress
