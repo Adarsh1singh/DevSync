@@ -1,0 +1,219 @@
+// DevSync Database Schema
+// Full-featured SaaS platform for team productivity and task management
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum Role {
+  ADMIN
+  MANAGER
+  DEVELOPER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_UPDATED
+  COMMENT_ADDED
+  PROJECT_ASSIGNED
+  TEAM_INVITE
+}
+
+// User model
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  avatar    String?
+  role      Role     @default(DEVELOPER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  teamMemberships TeamMember[]
+  projectMembers  ProjectMember[]
+  assignedTasks   Task[]          @relation("TaskAssignee")
+  createdTasks    Task[]          @relation("TaskCreator")
+  comments        Comment[]
+  notifications   Notification[]
+  createdProjects Project[]       @relation("ProjectCreator")
+
+  @@map("users")
+}
+
+// Team model
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  members  TeamMember[]
+  projects Project[]
+
+  @@map("teams")
+}
+
+// Team membership junction table
+model TeamMember {
+  id     String @id @default(cuid())
+  userId String
+  teamId String
+  role   Role   @default(DEVELOPER)
+
+  joinedAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@map("team_members")
+}
+
+// Project model
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  teamId      String
+  createdById String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  team           Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy      User            @relation("ProjectCreator", fields: [createdById], references: [id])
+  members        ProjectMember[]
+  tasks          Task[]
+  taskLabels     TaskLabel[]
+  notifications  Notification[]
+
+  @@map("projects")
+}
+
+// Project membership junction table
+model ProjectMember {
+  id        String @id @default(cuid())
+  userId    String
+  projectId String
+  role      Role   @default(DEVELOPER)
+
+  joinedAt DateTime @default(now())
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@map("project_members")
+}
+
+// Task model
+model Task {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  dueDate     DateTime?
+  projectId   String
+  assigneeId  String?
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee  User?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy User        @relation("TaskCreator", fields: [createdById], references: [id])
+  labels    TaskLabel[]
+  comments  Comment[]
+
+  @@index([projectId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([priority])
+  @@map("tasks")
+}
+
+// Task Label model
+model TaskLabel {
+  id        String @id @default(cuid())
+  name      String
+  color     String @default("#3B82F6") // Default blue color
+  projectId String
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@unique([name, projectId])
+  @@map("task_labels")
+}
+
+// Comment model
+model Comment {
+  id      String @id @default(cuid())
+  content String
+  taskId  String
+  userId  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("comments")
+}
+
+// Notification model
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  userId    String
+  projectId String?
+  isRead    Boolean          @default(false)
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
