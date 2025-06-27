@@ -8,6 +8,27 @@ const createTeam = async (req, res) => {
     const { name, description } = req.body;
     const userId = req.user.id;
 
+    // Check if user has permission to create teams
+    // Only users with ADMIN or MANAGER role in at least one team can create new teams
+    // For first-time users (no teams), allow team creation
+    const existingMemberships = await prisma.teamMember.findMany({
+      where: { userId },
+    });
+
+    // If user has existing memberships, check if they have ADMIN or MANAGER role
+    if (existingMemberships.length > 0) {
+      const hasPermission = existingMemberships.some(
+        membership => membership.role === 'ADMIN' || membership.role === 'MANAGER'
+      );
+
+      if (!hasPermission) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only users with ADMIN or MANAGER role can create teams',
+        });
+      }
+    }
+
     const team = await prisma.team.create({
       data: {
         name,

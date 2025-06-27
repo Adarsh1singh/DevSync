@@ -8,7 +8,7 @@ const createProject = async (req, res) => {
     const { name, description, teamId } = req.body;
     const userId = req.user.id;
 
-    // Check if user is a member of the team
+    // Check if user is a member of the team with ADMIN or MANAGER role
     const teamMember = await prisma.teamMember.findFirst({
       where: {
         teamId,
@@ -20,6 +20,14 @@ const createProject = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: 'You must be a team member to create projects',
+      });
+    }
+
+    // Check if user has permission to create projects (ADMIN or MANAGER only)
+    if (!['ADMIN', 'MANAGER'].includes(teamMember.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only team ADMINs and MANAGERs can create projects',
       });
     }
 

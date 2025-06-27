@@ -1,68 +1,106 @@
-import React, { useState } from 'react';
-import { Plus, Filter, Search, Calendar, User, Flag } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Filter, Search, Calendar, User, Loader2 } from 'lucide-react';
+import { useAppDispatch, useAppSelector } from '../../store';
+import { fetchTasks, updateTask } from '../../store/slices/tasksSlice';
+import CreateTaskModal from '../../components/Tasks/CreateTaskModal';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import type { Task } from '../../types';
 
 const TasksPage: React.FC = () => {
+  const dispatch = useAppDispatch();
+  const { tasks, isLoading, error } = useAppSelector((state) => state.tasks);
   const [view, setView] = useState<'list' | 'kanban'>('kanban');
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createTaskStatus, setCreateTaskStatus] = useState<'TODO' | 'IN_PROGRESS' | 'DONE'>('TODO');
 
-  // Mock data - will be replaced with real data from Redux store
-  const tasks = {
-    TODO: [
-      {
-        id: '1',
-        title: 'Design user onboarding flow',
-        description: 'Create wireframes and mockups for the user onboarding process',
-        priority: 'HIGH',
-        dueDate: '2024-03-20',
-        assignee: { name: 'Jane Smith', avatar: null },
-        project: 'DevSync Platform',
-        labels: ['Design', 'UX'],
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
       },
-      {
-        id: '2',
-        title: 'Set up database migrations',
-        description: 'Create initial database schema and migration scripts',
-        priority: 'MEDIUM',
-        dueDate: '2024-03-18',
-        assignee: { name: 'Mike Johnson', avatar: null },
-        project: 'DevSync Platform',
-        labels: ['Backend', 'Database'],
-      },
-    ],
-    IN_PROGRESS: [
-      {
-        id: '3',
-        title: 'Implement user authentication',
-        description: 'Build JWT-based authentication system with role management',
-        priority: 'HIGH',
-        dueDate: '2024-03-15',
-        assignee: { name: 'John Doe', avatar: null },
-        project: 'DevSync Platform',
-        labels: ['Backend', 'Security'],
-      },
-      {
-        id: '4',
-        title: 'Create task management UI',
-        description: 'Build the kanban board interface for task management',
-        priority: 'MEDIUM',
-        dueDate: '2024-03-22',
-        assignee: { name: 'Sarah Wilson', avatar: null },
-        project: 'DevSync Platform',
-        labels: ['Frontend', 'React'],
-      },
-    ],
-    DONE: [
-      {
-        id: '5',
-        title: 'Project setup and configuration',
-        description: 'Initialize project structure and development environment',
-        priority: 'HIGH',
-        dueDate: '2024-03-10',
-        assignee: { name: 'John Doe', avatar: null },
-        project: 'DevSync Platform',
-        labels: ['Setup', 'DevOps'],
-      },
-    ],
+    })
+  );
+
+  useEffect(() => {
+    dispatch(fetchTasks());
+  }, [dispatch]);
+
+  // Ensure tasks is always an array
+  const safeTasks = Array.isArray(tasks) ? tasks : [];
+
+  // Group tasks by status for kanban view
+  const groupedTasks = {
+    TODO: safeTasks.filter(task => task.status === 'TODO'),
+    IN_PROGRESS: safeTasks.filter(task => task.status === 'IN_PROGRESS'),
+    DONE: safeTasks.filter(task => task.status === 'DONE'),
   };
+
+  // Handle drag start
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const task = safeTasks.find(t => t.id === active.id);
+    setActiveTask(task || null);
+  };
+
+  // Handle drag end
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveTask(null);
+
+    if (!over) return;
+
+    const taskId = active.id as string;
+    const newStatus = over.id as 'TODO' | 'IN_PROGRESS' | 'DONE';
+
+    const task = safeTasks.find(t => t.id === taskId);
+    if (task && task.status !== newStatus) {
+      dispatch(updateTask({
+        taskId,
+        taskData: { status: newStatus }
+      }));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={() => dispatch(fetchTasks())}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -79,56 +117,139 @@ const TasksPage: React.FC = () => {
     }
   };
 
-  const TaskCard = ({ task }: { task: any }) => (
-    <div className="bg-card border border-border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
-      {/* Task Header */}
-      <div className="flex items-start justify-between mb-3">
-        <h3 className="font-medium text-foreground text-sm line-clamp-2">{task.title}</h3>
-        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(task.priority)}`}>
-          {task.priority}
-        </span>
-      </div>
+  // Sortable Task Card Component
+  const SortableTaskCard = ({ task }: { task: Task }) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: task.id });
 
-      {/* Task Description */}
-      {task.description && (
-        <p className="text-muted-foreground text-xs mb-3 line-clamp-2">{task.description}</p>
-      )}
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    };
 
-      {/* Task Labels */}
-      {task.labels && task.labels.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {task.labels.map((label: string, index: number) => (
-            <span
-              key={index}
-              className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full"
-            >
-              {label}
-            </span>
-          ))}
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
+        className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
+      >
+        {/* Task Header */}
+        <div className="flex items-start justify-between mb-3">
+          <h3 className="font-medium text-gray-900 text-sm line-clamp-2">{task.title}</h3>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(task.priority)}`}>
+            {task.priority}
+          </span>
         </div>
-      )}
 
-      {/* Task Footer */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <div className="flex items-center space-x-2">
-          {task.assignee && (
-            <div className="flex items-center space-x-1">
-              <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-                <User className="h-3 w-3 text-primary-foreground" />
+        {/* Task Description */}
+        {task.description && (
+          <p className="text-gray-600 text-xs mb-3 line-clamp-2">{task.description}</p>
+        )}
+
+        {/* Task Labels */}
+        {task.labels && task.labels.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {task.labels.map((label: any, index: number) => (
+              <span
+                key={index}
+                className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full"
+              >
+                {typeof label === 'string' ? label : label.name}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Task Footer */}
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <div className="flex items-center space-x-2">
+            {task.assignee && (
+              <div className="flex items-center space-x-1">
+                <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                  <User className="h-3 w-3 text-white" />
+                </div>
+                <span>
+                  {task.assignee.firstName} {task.assignee.lastName}
+                </span>
               </div>
-              <span>{task.assignee.name}</span>
+            )}
+            {task.project && (
+              <span className="text-xs text-gray-400">• {task.project.name}</span>
+            )}
+          </div>
+          {task.dueDate && (
+            <div className="flex items-center space-x-1">
+              <Calendar className="h-3 w-3" />
+              <span>{new Date(task.dueDate).toLocaleDateString()}</span>
             </div>
           )}
         </div>
-        {task.dueDate && (
-          <div className="flex items-center space-x-1">
-            <Calendar className="h-3 w-3" />
-            <span>{new Date(task.dueDate).toLocaleDateString()}</span>
-          </div>
-        )}
       </div>
-    </div>
-  );
+    );
+  };
+
+  // Droppable Column Component
+  const DroppableColumn = ({
+    id,
+    title,
+    tasks,
+    bgColor = "bg-gray-50",
+    badgeColor = "bg-gray-200 text-gray-700"
+  }: {
+    id: string;
+    title: string;
+    tasks: Task[];
+    bgColor?: string;
+    badgeColor?: string;
+  }) => {
+    const { setNodeRef, isOver } = useDroppable({
+      id,
+    });
+
+    const handleAddTask = () => {
+      setCreateTaskStatus(id as 'TODO' | 'IN_PROGRESS' | 'DONE');
+      setIsCreateModalOpen(true);
+    };
+
+    return (
+      <div
+        ref={setNodeRef}
+        className={`${bgColor} rounded-lg p-4 min-h-[500px] transition-colors ${
+          isOver ? 'ring-2 ring-blue-500 ring-opacity-50' : ''
+        }`}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900">{title}</h2>
+          <span className={`${badgeColor} px-2 py-1 rounded-full text-xs`}>
+            {tasks.length}
+          </span>
+        </div>
+        <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-3">
+            {tasks.map((task) => (
+              <SortableTaskCard key={task.id} task={task} />
+            ))}
+            <button
+              onClick={handleAddTask}
+              className="w-full border border-dashed border-gray-300 rounded-lg p-4 text-gray-500 hover:bg-gray-100 transition-colors"
+            >
+              <Plus className="h-4 w-4 mx-auto mb-1" />
+              <span className="text-sm">Add a task</span>
+            </button>
+          </div>
+        </SortableContext>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -145,7 +266,13 @@ const TasksPage: React.FC = () => {
             <Filter className="h-4 w-4" />
             <span>Filter</span>
           </button>
-          <button className="flex items-center space-x-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
+          <button
+            onClick={() => {
+              setCreateTaskStatus('TODO');
+              setIsCreateModalOpen(true);
+            }}
+            className="flex items-center space-x-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+          >
             <Plus className="h-4 w-4" />
             <span>New Task</span>
           </button>
@@ -191,60 +318,46 @@ const TasksPage: React.FC = () => {
 
       {/* Kanban Board */}
       {view === 'kanban' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* To Do Column */}
-          <div className="bg-muted/30 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-foreground">To Do</h2>
-              <span className="bg-muted text-muted-foreground px-2 py-1 rounded-full text-xs">
-                {tasks.TODO.length}
-              </span>
-            </div>
-            <div className="space-y-3">
-              {tasks.TODO.map((task) => (
-                <TaskCard key={task.id} task={task} />
-              ))}
-              <button className="w-full border border-dashed border-border rounded-lg p-4 text-muted-foreground hover:bg-accent/50 transition-colors">
-                <Plus className="h-4 w-4 mx-auto mb-1" />
-                <span className="text-sm">Add a task</span>
-              </button>
-            </div>
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <DroppableColumn
+              id="TODO"
+              title="To Do"
+              tasks={groupedTasks.TODO}
+              bgColor="bg-gray-50"
+              badgeColor="bg-gray-200 text-gray-700"
+            />
+            <DroppableColumn
+              id="IN_PROGRESS"
+              title="In Progress"
+              tasks={groupedTasks.IN_PROGRESS}
+              bgColor="bg-blue-50"
+              badgeColor="bg-blue-100 text-blue-800"
+            />
+            <DroppableColumn
+              id="DONE"
+              title="Done"
+              tasks={groupedTasks.DONE}
+              bgColor="bg-green-50"
+              badgeColor="bg-green-100 text-green-800"
+            />
           </div>
 
-          {/* In Progress Column */}
-          <div className="bg-blue-50/50 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-foreground">In Progress</h2>
-              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
-                {tasks.IN_PROGRESS.length}
-              </span>
-            </div>
-            <div className="space-y-3">
-              {tasks.IN_PROGRESS.map((task) => (
-                <TaskCard key={task.id} task={task} />
-              ))}
-              <button className="w-full border border-dashed border-border rounded-lg p-4 text-muted-foreground hover:bg-accent/50 transition-colors">
-                <Plus className="h-4 w-4 mx-auto mb-1" />
-                <span className="text-sm">Add a task</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Done Column */}
-          <div className="bg-green-50/50 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-foreground">Done</h2>
-              <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">
-                {tasks.DONE.length}
-              </span>
-            </div>
-            <div className="space-y-3">
-              {tasks.DONE.map((task) => (
-                <TaskCard key={task.id} task={task} />
-              ))}
-            </div>
-          </div>
-        </div>
+          <DragOverlay>
+            {activeTask ? (
+              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-lg rotate-3">
+                <h3 className="font-medium text-gray-900 text-sm">{activeTask.title}</h3>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(activeTask.priority)}`}>
+                  {activeTask.priority}
+                </span>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {/* List View */}
@@ -254,7 +367,7 @@ const TasksPage: React.FC = () => {
             <h2 className="font-semibold text-foreground">All Tasks</h2>
           </div>
           <div className="divide-y divide-border">
-            {Object.values(tasks).flat().map((task) => (
+            {safeTasks.map((task) => (
               <div key={task.id} className="px-6 py-4 hover:bg-accent/50 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
@@ -265,10 +378,14 @@ const TasksPage: React.FC = () => {
                       </span>
                     </div>
                     <p className="text-muted-foreground text-sm mt-1">{task.description}</p>
-                    <div className="flex items-center space-x-4 mt-2 text-xs text-muted-foreground">
-                      <span>{task.project}</span>
-                      <span>{task.assignee.name}</span>
-                      <span>{new Date(task.dueDate).toLocaleDateString()}</span>
+                    <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                      <span>{task.project?.name || 'No Project'}</span>
+                      {task.assignee && (
+                        <span>{task.assignee.firstName} {task.assignee.lastName}</span>
+                      )}
+                      {task.dueDate && (
+                        <span>{new Date(task.dueDate).toLocaleDateString()}</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -277,6 +394,13 @@ const TasksPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Create Task Modal */}
+      <CreateTaskModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        defaultStatus={createTaskStatus}
+      />
     </div>
   );
 };

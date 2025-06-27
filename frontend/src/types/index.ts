@@ -29,6 +29,16 @@ export interface TeamMember {
   };
 }
 
+export interface CreateTeamData {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateTeamData {
+  name?: string;
+  description?: string;
+}
+
 export interface Project {
   id: string;
   name: string;

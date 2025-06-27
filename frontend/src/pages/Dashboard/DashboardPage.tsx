@@ -1,66 +1,86 @@
-import React from 'react';
-import { BarChart3, Users, FolderOpen, CheckSquare, Clock, TrendingUp } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { BarChart3, Users, FolderOpen, CheckSquare, Clock, TrendingUp, Loader2 } from 'lucide-react';
 import AnalyticsDashboard from '../../components/Dashboard/AnalyticsDashboard';
+import { useAppDispatch, useAppSelector } from '../../store';
+import { fetchTeams } from '../../store/slices/teamsSlice';
+import { fetchProjects } from '../../store/slices/projectsSlice';
+import { fetchTasks } from '../../store/slices/tasksSlice';
 
 const DashboardPage: React.FC = () => {
-  // Mock data - will be replaced with real data from Redux store
+  const dispatch = useAppDispatch();
+  const { teams, isLoading: teamsLoading } = useAppSelector((state) => state.teams);
+  const { projects, isLoading: projectsLoading } = useAppSelector((state) => state.projects);
+  const { tasks, isLoading: tasksLoading } = useAppSelector((state) => state.tasks);
+
+  useEffect(() => {
+    dispatch(fetchTeams());
+    dispatch(fetchProjects());
+    dispatch(fetchTasks());
+  }, [dispatch]);
+
+  // Ensure data is always arrays
+  const safeTeams = Array.isArray(teams) ? teams : [];
+  const safeProjects = Array.isArray(projects) ? projects : [];
+  const safeTasks = Array.isArray(tasks) ? tasks : [];
+
+  const isLoading = teamsLoading || projectsLoading || tasksLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  // Calculate real statistics
+  const totalMembers = safeTeams.reduce((acc, team) => acc + (team._count?.members || 0), 0);
+  const completedTasks = safeTasks.filter(task => task.status === 'DONE').length;
+  const activeProjects = safeProjects.filter(project => project.isActive).length;
+
   const stats = [
     {
       title: 'Total Tasks',
-      value: '24',
-      change: '+12%',
+      value: safeTasks.length.toString(),
+      change: `${completedTasks} completed`,
       changeType: 'positive' as const,
       icon: CheckSquare,
     },
     {
       title: 'Active Projects',
-      value: '8',
-      change: '+3%',
+      value: activeProjects.toString(),
+      change: `${safeProjects.length} total`,
       changeType: 'positive' as const,
       icon: FolderOpen,
     },
     {
       title: 'Team Members',
-      value: '12',
-      change: '+2',
+      value: totalMembers.toString(),
+      change: `${safeTeams.length} teams`,
       changeType: 'positive' as const,
       icon: Users,
     },
     {
-      title: 'Avg. Completion Time',
-      value: '2.4 days',
-      change: '-8%',
+      title: 'Completion Rate',
+      value: safeTasks.length > 0 ? `${Math.round((completedTasks / safeTasks.length) * 100)}%` : '0%',
+      change: `${completedTasks}/${safeTasks.length}`,
       changeType: 'positive' as const,
       icon: Clock,
     },
   ];
 
-  const recentTasks = [
-    {
-      id: '1',
-      title: 'Implement user authentication',
-      project: 'DevSync Platform',
-      status: 'IN_PROGRESS',
-      priority: 'HIGH',
-      assignee: 'John Doe',
-    },
-    {
-      id: '2',
-      title: 'Design dashboard mockups',
-      project: 'DevSync Platform',
-      status: 'TODO',
-      priority: 'MEDIUM',
-      assignee: 'Jane Smith',
-    },
-    {
-      id: '3',
-      title: 'Set up CI/CD pipeline',
-      project: 'DevSync Platform',
-      status: 'DONE',
-      priority: 'HIGH',
-      assignee: 'Mike Johnson',
-    },
-  ];
+  // Get recent tasks (last 5 updated tasks)
+  const recentTasks = safeTasks
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, 5)
+    .map(task => ({
+      id: task.id,
+      title: task.title,
+      project: task.project?.name || 'No Project',
+      status: task.status,
+      priority: task.priority,
+      assignee: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Unassigned',
+    }));
 
   const getStatusColor = (status: string) => {
     switch (status) {
