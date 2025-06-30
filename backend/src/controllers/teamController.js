@@ -397,11 +397,403 @@ const removeTeamMember = async (req, res) => {
   }
 };
 
+/**
+ * Delete team
+ */
+const deleteTeam = async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const userId = req.user.id;
+
+    // Check if current user is admin of the team
+    const isAdmin = await prisma.teamMember.findFirst({
+      where: {
+        teamId,
+        userId,
+        role: 'ADMIN',
+      },
+    });
+
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only team admins can delete teams',
+      });
+    }
+
+    // Check if team has active projects
+    const activeProjects = await prisma.project.count({
+      where: {
+        teamId,
+        isActive: true,
+      },
+    });
+
+    if (activeProjects > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete team with active projects. Please deactivate or transfer projects first.',
+      });
+    }
+
+    // Delete team (this will cascade delete team members due to foreign key constraints)
+    await prisma.team.delete({
+      where: { id: teamId },
+    });
+
+    res.json({
+      success: true,
+      message: 'Team deleted successfully',
+    });
+  } catch (error) {
+    console.error('Delete team error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+  }
+};
+
+/**
+ * Get team activity
+ */
+const getTeamActivity = async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const userId = req.user.id;
+
+    // Check if user is a member of the team
+    const teamMember = await prisma.teamMember.findFirst({
+      where: {
+        teamId,
+        userId,
+      },
+    });
+
+    if (!teamMember) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You are not a member of this team.',
+      });
+    }
+
+    // Get team projects
+    const teamProjects = await prisma.project.findMany({
+      where: { teamId },
+      select: { id: true },
+    });
+
+    const projectIds = teamProjects.map(p => p.id);
+
+    // Get recent activities
+    const activities = [];
+
+    // Recent task completions (last 30 days)
+    const recentTasks = await prisma.task.findMany({
+      where: {
+        projectId: { in: projectIds },
+        status: 'DONE',
+        updatedAt: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+        },
+      },
+      include: {
+        assignee: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+        project: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+      take: 10,
+    });
+
+    recentTasks.forEach(task => {
+      activities.push({
+        id: `task-${task.id}`,
+        type: 'task_completed',
+        message: `Task "${task.title}" was completed in ${task.project.name}`,
+        user: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Unknown',
+        timestamp: task.updatedAt,
+        metadata: {
+          taskId: task.id,
+          projectId: task.projectId,
+        },
+      });
+    });
+
+    // Recent project creations
+    const recentProjects = await prisma.project.findMany({
+      where: {
+        teamId,
+        createdAt: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+        },
+      },
+      include: {
+        createdBy: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 5,
+    });
+
+    recentProjects.forEach(project => {
+      activities.push({
+        id: `project-${project.id}`,
+        type: 'project_created',
+        message: `Project "${project.name}" was created`,
+        user: `${project.createdBy.firstName} ${project.createdBy.lastName}`,
+        timestamp: project.createdAt,
+        metadata: {
+          projectId: project.id,
+        },
+      });
+    });
+
+    // Recent member joins
+    const recentMembers = await prisma.teamMember.findMany({
+      where: {
+        teamId,
+        joinedAt: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+        },
+      },
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: {
+        joinedAt: 'desc',
+      },
+      take: 5,
+    });
+
+    recentMembers.forEach(member => {
+      activities.push({
+        id: `member-${member.id}`,
+        type: 'member_joined',
+        message: `${member.user.firstName} ${member.user.lastName} joined the team`,
+        user: 'System',
+        timestamp: member.joinedAt,
+        metadata: {
+          memberId: member.id,
+          userId: member.userId,
+        },
+      });
+    });
+
+    // Sort all activities by timestamp
+    activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    res.json({
+      success: true,
+      data: { activities: activities.slice(0, 20) }, // Return top 20 activities
+    });
+  } catch (error) {
+    console.error('Get team activity error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+  }
+};
+
+/**
+ * Get global team activity for user
+ */
+const getGlobalTeamActivity = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get all teams user is a member of
+    const userTeams = await prisma.teamMember.findMany({
+      where: { userId },
+      select: { teamId: true },
+    });
+
+    const teamIds = userTeams.map(tm => tm.teamId);
+
+    if (teamIds.length === 0) {
+      return res.json({
+        success: true,
+        data: { activities: [] },
+      });
+    }
+
+    // Get all projects for user's teams
+    const teamProjects = await prisma.project.findMany({
+      where: { teamId: { in: teamIds } },
+      select: { id: true, teamId: true },
+    });
+
+    const projectIds = teamProjects.map(p => p.id);
+
+    const activities = [];
+
+    // Recent task completions (last 7 days)
+    const recentTasks = await prisma.task.findMany({
+      where: {
+        projectId: { in: projectIds },
+        status: 'DONE',
+        updatedAt: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+        },
+      },
+      include: {
+        assignee: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+        project: {
+          include: {
+            team: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+      take: 5,
+    });
+
+    recentTasks.forEach(task => {
+      activities.push({
+        id: `task-${task.id}`,
+        type: 'task_completed',
+        message: `Task "${task.title}" was completed in ${task.project.team.name}`,
+        user: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Unknown',
+        timestamp: task.updatedAt,
+        teamName: task.project.team.name,
+      });
+    });
+
+    // Recent team member joins (last 7 days)
+    const recentMembers = await prisma.teamMember.findMany({
+      where: {
+        teamId: { in: teamIds },
+        joinedAt: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+        },
+      },
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+        team: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        joinedAt: 'desc',
+      },
+      take: 5,
+    });
+
+    recentMembers.forEach(member => {
+      activities.push({
+        id: `member-${member.id}`,
+        type: 'member_joined',
+        message: `${member.user.firstName} ${member.user.lastName} joined ${member.team.name}`,
+        user: 'System',
+        timestamp: member.joinedAt,
+        teamName: member.team.name,
+      });
+    });
+
+    // Recent team creations (last 7 days)
+    const recentTeams = await prisma.team.findMany({
+      where: {
+        id: { in: teamIds },
+        createdAt: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+        },
+      },
+      include: {
+        members: {
+          where: { role: 'ADMIN' },
+          include: {
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+          take: 1,
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 3,
+    });
+
+    recentTeams.forEach(team => {
+      const admin = team.members[0];
+      activities.push({
+        id: `team-${team.id}`,
+        type: 'team_created',
+        message: `${team.name} was created`,
+        user: admin ? `${admin.user.firstName} ${admin.user.lastName}` : 'Unknown',
+        timestamp: team.createdAt,
+        teamName: team.name,
+      });
+    });
+
+    // Sort all activities by timestamp
+    activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    res.json({
+      success: true,
+      data: { activities: activities.slice(0, 10) }, // Return top 10 activities
+    });
+  } catch (error) {
+    console.error('Get global team activity error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+  }
+};
+
 module.exports = {
   createTeam,
   getUserTeams,
-  getTeamById,
+  getTeam: getTeamById,
   updateTeam,
+  deleteTeam,
   addTeamMember,
   removeTeamMember,
+  getTeamActivity,
+  getGlobalTeamActivity,
 };

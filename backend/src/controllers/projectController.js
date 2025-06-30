@@ -480,11 +480,293 @@ const removeProjectMember = async (req, res) => {
   }
 };
 
+/**
+ * Get project activity
+ */
+const getProjectActivity = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const userId = req.user.id;
+
+    // Check if user is a member of the project
+    const projectMember = await prisma.projectMember.findFirst({
+      where: {
+        projectId,
+        userId,
+      },
+    });
+
+    if (!projectMember) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You are not a member of this project.',
+      });
+    }
+
+    const activities = [];
+
+    // Recent task activities (last 30 days)
+    const recentTasks = await prisma.task.findMany({
+      where: {
+        projectId,
+        updatedAt: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+        },
+      },
+      include: {
+        assignee: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+        createdBy: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+      take: 15,
+    });
+
+    recentTasks.forEach(task => {
+      // Task completion
+      if (task.status === 'DONE') {
+        activities.push({
+          id: `task-done-${task.id}`,
+          type: 'task_completed',
+          message: `Task "${task.title}" was completed`,
+          user: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : 'Unknown',
+          timestamp: task.updatedAt,
+          metadata: {
+            taskId: task.id,
+            taskTitle: task.title,
+          },
+        });
+      }
+
+      // Task creation
+      if (task.createdAt >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) {
+        activities.push({
+          id: `task-created-${task.id}`,
+          type: 'task_created',
+          message: `Task "${task.title}" was created`,
+          user: task.createdBy ? `${task.createdBy.firstName} ${task.createdBy.lastName}` : 'Unknown',
+          timestamp: task.createdAt,
+          metadata: {
+            taskId: task.id,
+            taskTitle: task.title,
+          },
+        });
+      }
+
+      // Task assignment
+      if (task.assignee && task.assigneeId) {
+        activities.push({
+          id: `task-assigned-${task.id}`,
+          type: 'task_assigned',
+          message: `Task "${task.title}" was assigned to ${task.assignee.firstName} ${task.assignee.lastName}`,
+          user: 'System',
+          timestamp: task.updatedAt,
+          metadata: {
+            taskId: task.id,
+            taskTitle: task.title,
+            assigneeId: task.assigneeId,
+          },
+        });
+      }
+    });
+
+    // Recent project member additions (last 30 days)
+    const recentMembers = await prisma.projectMember.findMany({
+      where: {
+        projectId,
+        createdAt: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+        },
+      },
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 5,
+    });
+
+    recentMembers.forEach(member => {
+      activities.push({
+        id: `member-added-${member.id}`,
+        type: 'member_added',
+        message: `${member.user.firstName} ${member.user.lastName} joined the project`,
+        user: 'System',
+        timestamp: member.createdAt,
+        metadata: {
+          memberId: member.id,
+          userId: member.userId,
+          role: member.role,
+        },
+      });
+    });
+
+    // Recent comments (last 30 days)
+    const recentComments = await prisma.comment.findMany({
+      where: {
+        task: {
+          projectId,
+        },
+        createdAt: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+        },
+      },
+      include: {
+        author: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+        task: {
+          select: {
+            title: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 10,
+    });
+
+    recentComments.forEach(comment => {
+      activities.push({
+        id: `comment-${comment.id}`,
+        type: 'comment_added',
+        message: `${comment.author.firstName} ${comment.author.lastName} commented on "${comment.task.title}"`,
+        user: `${comment.author.firstName} ${comment.author.lastName}`,
+        timestamp: comment.createdAt,
+        metadata: {
+          commentId: comment.id,
+          taskId: comment.taskId,
+          taskTitle: comment.task.title,
+        },
+      });
+    });
+
+    // Sort all activities by timestamp
+    activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    res.json({
+      success: true,
+      data: { activities: activities.slice(0, 20) }, // Return top 20 activities
+    });
+  } catch (error) {
+    console.error('Get project activity error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+  }
+};
+
+/**
+ * Delete project
+ */
+const deleteProject = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const userId = req.user.id;
+
+    // Check if user is admin/lead of the project or team admin
+    const projectMember = await prisma.projectMember.findFirst({
+      where: {
+        projectId,
+        userId,
+        role: { in: ['ADMIN', 'LEAD'] },
+      },
+    });
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        team: {
+          include: {
+            members: {
+              where: {
+                userId,
+                role: 'ADMIN',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found',
+      });
+    }
+
+    const isTeamAdmin = project.team.members.length > 0;
+
+    if (!projectMember && !isTeamAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only project leads/admins or team admins can delete projects',
+      });
+    }
+
+    // Check if project has active tasks
+    const activeTasks = await prisma.task.count({
+      where: {
+        projectId,
+        status: { in: ['TODO', 'IN_PROGRESS'] },
+      },
+    });
+
+    if (activeTasks > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete project with active tasks. Please complete or remove all tasks first.',
+      });
+    }
+
+    // Delete project (this will cascade delete project members and tasks due to foreign key constraints)
+    await prisma.project.delete({
+      where: { id: projectId },
+    });
+
+    res.json({
+      success: true,
+      message: 'Project deleted successfully',
+    });
+  } catch (error) {
+    console.error('Delete project error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+  }
+};
+
 module.exports = {
   createProject,
   getUserProjects,
   getProjectById,
   updateProject,
+  deleteProject,
   addProjectMember,
   removeProjectMember,
+  getProjectActivity,
 };

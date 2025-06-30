@@ -2,10 +2,13 @@ const express = require('express');
 const {
   createTeam,
   getUserTeams,
-  getTeamById,
+  getTeam,
   updateTeam,
+  deleteTeam,
   addTeamMember,
   removeTeamMember,
+  getTeamActivity,
+  getGlobalTeamActivity,
 } = require('../controllers/teamController');
 const { authenticate, authorize } = require('../middleware/auth');
 const {
@@ -13,6 +16,11 @@ const {
   handleValidationErrors,
 } = require('../middleware/validation');
 const { body, param } = require('express-validator');
+
+// Custom CUID validator
+const isCuid = (value) => {
+  return /^c[a-z0-9]{24}$/.test(value);
+};
 
 const router = express.Router();
 
@@ -34,14 +42,21 @@ router.post('/', validateTeamCreation, createTeam);
 router.get('/', getUserTeams);
 
 /**
+ * @route   GET /api/teams/activity
+ * @desc    Get global team activity for user
+ * @access  Private
+ */
+router.get('/activity', getGlobalTeamActivity);
+
+/**
  * @route   GET /api/teams/:teamId
  * @desc    Get team by ID
  * @access  Private
  */
 router.get('/:teamId', [
-  param('teamId').isUUID().withMessage('teamId must be a valid UUID'),
+  param('teamId').custom(isCuid).withMessage('teamId must be a valid ID'),
   handleValidationErrors,
-], getTeamById);
+], getTeam);
 
 /**
  * @route   PUT /api/teams/:teamId
@@ -49,7 +64,7 @@ router.get('/:teamId', [
  * @access  Private (Team Admin only)
  */
 router.put('/:teamId', [
-  param('teamId').isUUID().withMessage('teamId must be a valid UUID'),
+  param('teamId').custom(isCuid).withMessage('teamId must be a valid ID'),
   body('name')
     .optional()
     .trim()
@@ -69,7 +84,7 @@ router.put('/:teamId', [
  * @access  Private (Team Admin only)
  */
 router.post('/:teamId/members', [
-  param('teamId').isUUID().withMessage('teamId must be a valid UUID'),
+  param('teamId').custom(isCuid).withMessage('teamId must be a valid ID'),
   body('email')
     .isEmail()
     .normalizeEmail()
@@ -87,9 +102,29 @@ router.post('/:teamId/members', [
  * @access  Private (Team Admin only)
  */
 router.delete('/:teamId/members/:memberId', [
-  param('teamId').isUUID().withMessage('teamId must be a valid UUID'),
-  param('memberId').isUUID().withMessage('memberId must be a valid UUID'),
+  param('teamId').custom(isCuid).withMessage('teamId must be a valid ID'),
+  param('memberId').custom(isCuid).withMessage('memberId must be a valid ID'),
   handleValidationErrors,
 ], removeTeamMember);
+
+/**
+ * @route   GET /api/teams/:teamId/activity
+ * @desc    Get team activity
+ * @access  Private (Team Member only)
+ */
+router.get('/:teamId/activity', [
+  param('teamId').custom(isCuid).withMessage('teamId must be a valid ID'),
+  handleValidationErrors,
+], getTeamActivity);
+
+/**
+ * @route   DELETE /api/teams/:teamId
+ * @desc    Delete team
+ * @access  Private (Team Admin only)
+ */
+router.delete('/:teamId', [
+  param('teamId').custom(isCuid).withMessage('teamId must be a valid ID'),
+  handleValidationErrors,
+], deleteTeam);
 
 module.exports = router;

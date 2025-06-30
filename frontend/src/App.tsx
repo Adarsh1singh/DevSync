@@ -16,7 +16,9 @@ import LoginPage from './pages/Auth/LoginPage';
 import RegisterPage from './pages/Auth/RegisterPage';
 import DashboardPage from './pages/Dashboard/DashboardPage';
 import TeamsPage from './pages/Teams/TeamsPage';
+import TeamDetailsPage from './pages/Teams/TeamDetailsPage';
 import ProjectsPage from './pages/Projects/ProjectsPage';
+import ProjectDetailsPage from './pages/Projects/ProjectDetailsPage';
 import TasksPage from './pages/Tasks/TasksPage';
 import ProfilePage from './pages/Profile/ProfilePage';
 
@@ -54,7 +56,9 @@ function AppContent() {
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="teams" element={<TeamsPage />} />
+              <Route path="teams/:teamId" element={<TeamDetailsPage />} />
               <Route path="projects" element={<ProjectsPage />} />
+              <Route path="projects/:projectId" element={<ProjectDetailsPage />} />
               <Route path="tasks" element={<TasksPage />} />
               <Route path="profile" element={<ProfilePage />} />
             </Route>

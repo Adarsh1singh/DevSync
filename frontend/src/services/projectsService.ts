@@ -78,4 +78,10 @@ export const projectsService = {
   removeProjectMember: async (projectId: string, memberId: string): Promise<void> => {
     await api.delete(`/projects/${projectId}/members/${memberId}`);
   },
+
+  // Get project activity
+  getProjectActivity: async (projectId: string): Promise<any[]> => {
+    const response = await api.get(`/projects/${projectId}/activity`);
+    return response.data.data.activities;
+  },
 };

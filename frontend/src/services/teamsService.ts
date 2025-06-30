@@ -60,4 +60,16 @@ export const teamsService = {
   removeTeamMember: async (teamId: string, memberId: string): Promise<void> => {
     await api.delete(`/teams/${teamId}/members/${memberId}`);
   },
+
+  // Get team activity
+  getTeamActivity: async (teamId: string): Promise<any[]> => {
+    const response = await api.get(`/teams/${teamId}/activity`);
+    return response.data.data.activities;
+  },
+
+  // Get global team activity for user
+  getGlobalTeamActivity: async (): Promise<any[]> => {
+    const response = await api.get('/teams/activity');
+    return response.data.data.activities;
+  },
 };

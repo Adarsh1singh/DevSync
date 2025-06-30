@@ -63,6 +63,11 @@ const validateUserLogin = [
   handleValidationErrors,
 ];
 
+// Custom CUID validator
+const isCuid = (value) => {
+  return /^c[a-z0-9]{24}$/.test(value);
+};
+
 /**
  * Project creation validation
  */
@@ -77,7 +82,7 @@ const validateProjectCreation = [
     .isLength({ max: 500 })
     .withMessage('Description must not exceed 500 characters'),
   body('teamId')
-    .isUUID()
+    .custom(isCuid)
     .withMessage('Valid team ID is required'),
   handleValidationErrors,
 ];
@@ -105,8 +110,8 @@ const validateTaskCreation = [
     .withMessage('Due date must be a valid date'),
   body('assigneeId')
     .optional()
-    .isUUID()
-    .withMessage('Assignee ID must be a valid UUID'),
+    .custom(isCuid)
+    .withMessage('Assignee ID must be a valid ID'),
   handleValidationErrors,
 ];
 
@@ -138,12 +143,12 @@ const validateTeamCreation = [
 ];
 
 /**
- * UUID parameter validation
+ * CUID parameter validation
  */
-const validateUUIDParam = (paramName) => [
+const validateCUIDParam = (paramName) => [
   param(paramName)
-    .isUUID()
-    .withMessage(`${paramName} must be a valid UUID`),
+    .custom(isCuid)
+    .withMessage(`${paramName} must be a valid ID`),
 ];
 
 module.exports = {
@@ -154,5 +159,5 @@ module.exports = {
   validateTaskCreation,
   validateCommentCreation,
   validateTeamCreation,
-  validateUUIDParam,
+  validateCUIDParam,
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, FolderOpen, Calendar, Users, MoreHorizontal, Loader2 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { fetchProjects } from '../../store/slices/projectsSlice';
@@ -8,9 +9,12 @@ import { canCreateAnyProject } from '../../utils/permissions';
 
 const ProjectsPage: React.FC = () => {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const { projects, isLoading, error } = useAppSelector((state) => state.projects);
   const { teams } = useAppSelector((state) => state.teams);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'completed' | 'on_hold'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     dispatch(fetchProjects());
@@ -23,6 +27,37 @@ const ProjectsPage: React.FC = () => {
 
   // Check permissions
   const userCanCreateProject = canCreateAnyProject(safeTeams);
+
+  // Filter projects based on active filter and search term
+  const filteredProjects = safeProjects.filter(project => {
+    const matchesFilter = (() => {
+      switch (activeFilter) {
+        case 'active':
+          return project.isActive;
+        case 'completed':
+          return !project.isActive; // Assuming inactive means completed
+        case 'on_hold':
+          return false; // We'll need to add a status field for this
+        default:
+          return true;
+      }
+    })();
+
+    const matchesSearch = searchTerm === '' ||
+      project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.team?.name.toLowerCase().includes(searchTerm.toLowerCase());
+
+    return matchesFilter && matchesSearch;
+  });
+
+  // Calculate filter counts
+  const filterCounts = {
+    all: safeProjects.length,
+    active: safeProjects.filter(p => p.isActive).length,
+    completed: safeProjects.filter(p => !p.isActive).length,
+    on_hold: 0, // We'll implement this later
+  };
 
   if (isLoading) {
     return (
@@ -83,25 +118,49 @@ const ProjectsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex space-x-1 bg-muted p-1 rounded-lg w-fit">
-        <button className="px-4 py-2 text-sm font-medium bg-background text-foreground rounded-md shadow-sm">
-          All Projects
-        </button>
-        <button className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-          Active
-        </button>
-        <button className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-          Completed
-        </button>
-        <button className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-          On Hold
-        </button>
+      {/* Filter Tabs and Search */}
+      <div className="flex items-center justify-between">
+        <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+          {[
+            { id: 'all', label: 'All Projects', count: filterCounts.all },
+            { id: 'active', label: 'Active', count: filterCounts.active },
+            { id: 'completed', label: 'Completed', count: filterCounts.completed },
+            { id: 'on_hold', label: 'On Hold', count: filterCounts.on_hold },
+          ].map((filter) => (
+            <button
+              key={filter.id}
+              onClick={() => setActiveFilter(filter.id as any)}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                activeFilter === filter.id
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {filter.label} ({filter.count})
+            </button>
+          ))}
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search projects..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
+          />
+          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+            <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+        </div>
       </div>
 
       {/* Projects Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {safeProjects.map((project) => {
+        {filteredProjects.map((project) => {
           const taskCount = project._count?.tasks || 0;
           const progressPercentage = getProgressPercentage(0, taskCount); // We'll need to calculate completed tasks
           
@@ -155,10 +214,16 @@ const ProjectsPage: React.FC = () => {
 
               {/* Project Actions */}
               <div className="flex items-center space-x-2">
-                <button className="flex-1 bg-primary text-primary-foreground px-3 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors">
+                <button
+                  onClick={() => navigate(`/projects/${project.id}`)}
+                  className="flex-1 bg-blue-500 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors"
+                >
                   View Project
                 </button>
-                <button className="px-3 py-2 border border-border rounded-lg text-sm font-medium hover:bg-accent transition-colors">
+                <button
+                  onClick={() => navigate(`/projects/${project.id}?tab=tasks`)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                >
                   Tasks
                 </button>
               </div>
@@ -166,42 +231,63 @@ const ProjectsPage: React.FC = () => {
           );
         })}
 
-        {/* Create Project Card */}
-        <div
-          onClick={() => setIsCreateModalOpen(true)}
-          className="bg-white border border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors cursor-pointer"
-        >
-          <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-            <Plus className="h-6 w-6 text-gray-500" />
+        {/* Empty State */}
+        {filteredProjects.length === 0 && safeProjects.length > 0 && (
+          <div className="col-span-full text-center py-12">
+            <FolderOpen className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No projects found</h3>
+            <p className="text-gray-600 mb-4">
+              {searchTerm ? `No projects match "${searchTerm}"` : `No ${activeFilter} projects found`}
+            </p>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="text-blue-500 hover:text-blue-600 text-sm font-medium"
+              >
+                Clear search
+              </button>
+            )}
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Create New Project</h3>
-          <p className="text-sm text-gray-600 mb-4">
-            Start a new project and invite your team
-          </p>
-          <button className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">
-            Get Started
-          </button>
-        </div>
+        )}
+
+        {/* Create Project Card */}
+        {userCanCreateProject && (
+          <div
+            onClick={() => setIsCreateModalOpen(true)}
+            className="bg-white border border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors cursor-pointer"
+          >
+            <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
+              <Plus className="h-6 w-6 text-gray-500" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Create New Project</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Start a new project and invite your team
+            </p>
+            <button className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">
+              Get Started
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Project Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Total Projects</p>
-              <p className="text-2xl font-bold text-foreground mt-2">{projects.length}</p>
+              <p className="text-sm font-medium text-gray-600">Total Projects</p>
+              <p className="text-2xl font-bold text-gray-900 mt-2">{safeProjects.length}</p>
             </div>
-            <FolderOpen className="h-8 w-8 text-primary" />
+            <FolderOpen className="h-8 w-8 text-blue-500" />
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Active Projects</p>
-              <p className="text-2xl font-bold text-foreground mt-2">
-                {projects.filter(p => p.status === 'active').length}
+              <p className="text-sm font-medium text-gray-600">Active Projects</p>
+              <p className="text-2xl font-bold text-gray-900 mt-2">
+                {safeProjects.filter(p => p.isActive).length}
               </p>
             </div>
             <div className="h-8 w-8 bg-green-100 rounded-lg flex items-center justify-center">
@@ -210,12 +296,12 @@ const ProjectsPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Completed Projects</p>
-              <p className="text-2xl font-bold text-foreground mt-2">
-                {projects.filter(p => p.status === 'completed').length}
+              <p className="text-sm font-medium text-gray-600">Completed Projects</p>
+              <p className="text-2xl font-bold text-gray-900 mt-2">
+                {safeProjects.filter(p => !p.isActive).length}
               </p>
             </div>
             <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">

@@ -97,13 +97,28 @@ export const getUserHighestRole = (teams: Team[]): string | null => {
     return null;
   }
 
-  const roles = teams.flatMap(team => 
+  const roles = teams.flatMap(team =>
     team.members?.map(member => member.role) || []
   );
 
   if (roles.includes('ADMIN')) return 'ADMIN';
   if (roles.includes('MANAGER')) return 'MANAGER';
   if (roles.includes('DEVELOPER')) return 'DEVELOPER';
-  
+
   return null;
+};
+
+/**
+ * Check if user can manage a specific project
+ * Users can manage projects if they have ADMIN or MANAGER role in that project
+ */
+export const canManageProject = (project: any): boolean => {
+  if (!project || !project.members) {
+    return false;
+  }
+
+  // Check if current user has ADMIN or MANAGER role in this project
+  return project.members.some((member: any) =>
+    ['ADMIN', 'MANAGER'].includes(member.role)
+  );
 };

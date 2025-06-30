@@ -4,8 +4,10 @@ const {
   getUserProjects,
   getProjectById,
   updateProject,
+  deleteProject,
   addProjectMember,
   removeProjectMember,
+  getProjectActivity,
 } = require('../controllers/projectController');
 const { authenticate } = require('../middleware/auth');
 const {
@@ -13,6 +15,11 @@ const {
   handleValidationErrors,
 } = require('../middleware/validation');
 const { body, query, param } = require('express-validator');
+
+// Custom CUID validator
+const isCuid = (value) => {
+  return /^c[a-z0-9]{24}$/.test(value);
+};
 
 const router = express.Router();
 
@@ -34,8 +41,8 @@ router.post('/', validateProjectCreation, createProject);
 router.get('/', [
   query('teamId')
     .optional()
-    .isUUID()
-    .withMessage('Team ID must be a valid UUID'),
+    .custom(isCuid)
+    .withMessage('Team ID must be a valid ID'),
   handleValidationErrors,
 ], getUserProjects);
 
@@ -45,7 +52,7 @@ router.get('/', [
  * @access  Private
  */
 router.get('/:projectId', [
-  param('projectId').isUUID().withMessage('projectId must be a valid UUID'),
+  param('projectId').custom(isCuid).withMessage('projectId must be a valid ID'),
   handleValidationErrors,
 ], getProjectById);
 
@@ -55,7 +62,7 @@ router.get('/:projectId', [
  * @access  Private (Project Admin/Manager only)
  */
 router.put('/:projectId', [
-  param('projectId').isUUID().withMessage('projectId must be a valid UUID'),
+  param('projectId').custom(isCuid).withMessage('projectId must be a valid ID'),
   body('name')
     .optional()
     .trim()
@@ -70,15 +77,25 @@ router.put('/:projectId', [
 ], updateProject);
 
 /**
+ * @route   DELETE /api/projects/:projectId
+ * @desc    Delete project
+ * @access  Private (Project Admin/Lead or Team Admin only)
+ */
+router.delete('/:projectId', [
+  param('projectId').custom(isCuid).withMessage('projectId must be a valid ID'),
+  handleValidationErrors,
+], deleteProject);
+
+/**
  * @route   POST /api/projects/:projectId/members
  * @desc    Add member to project
  * @access  Private (Project Admin/Manager only)
  */
 router.post('/:projectId/members', [
-  param('projectId').isUUID().withMessage('projectId must be a valid UUID'),
+  param('projectId').custom(isCuid).withMessage('projectId must be a valid ID'),
   body('userId')
-    .isUUID()
-    .withMessage('User ID must be a valid UUID'),
+    .custom(isCuid)
+    .withMessage('User ID must be a valid ID'),
   body('role')
     .optional()
     .isIn(['ADMIN', 'MANAGER', 'DEVELOPER'])
@@ -92,9 +109,19 @@ router.post('/:projectId/members', [
  * @access  Private (Project Admin/Manager only)
  */
 router.delete('/:projectId/members/:memberId', [
-  param('projectId').isUUID().withMessage('projectId must be a valid UUID'),
-  param('memberId').isUUID().withMessage('memberId must be a valid UUID'),
+  param('projectId').custom(isCuid).withMessage('projectId must be a valid ID'),
+  param('memberId').custom(isCuid).withMessage('memberId must be a valid ID'),
   handleValidationErrors,
 ], removeProjectMember);
+
+/**
+ * @route   GET /api/projects/:projectId/activity
+ * @desc    Get project activity
+ * @access  Private (Project Member only)
+ */
+router.get('/:projectId/activity', [
+  param('projectId').custom(isCuid).withMessage('projectId must be a valid ID'),
+  handleValidationErrors,
+], getProjectActivity);
 
 module.exports = router;

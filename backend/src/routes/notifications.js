@@ -9,6 +9,11 @@ const { authenticate } = require('../middleware/auth');
 const { handleValidationErrors } = require('../middleware/validation');
 const { query, param } = require('express-validator');
 
+// Custom CUID validator
+const isCuid = (value) => {
+  return /^c[a-z0-9]{24}$/.test(value);
+};
+
 const router = express.Router();
 
 // All routes require authentication
@@ -48,7 +53,7 @@ router.get('/unread-count', getUnreadCount);
  * @access  Private
  */
 router.put('/:notificationId/read', [
-  param('notificationId').isUUID().withMessage('notificationId must be a valid UUID'),
+  param('notificationId').custom(isCuid).withMessage('notificationId must be a valid ID'),
   handleValidationErrors,
 ], markAsRead);
 

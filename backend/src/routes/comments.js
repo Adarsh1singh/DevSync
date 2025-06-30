@@ -11,6 +11,11 @@ const {
 } = require('../middleware/validation');
 const { body, param } = require('express-validator');
 
+// Custom CUID validator
+const isCuid = (value) => {
+  return /^c[a-z0-9]{24}$/.test(value);
+};
+
 const router = express.Router();
 
 // All routes require authentication
@@ -22,7 +27,7 @@ router.use(authenticate);
  * @access  Private
  */
 router.post('/task/:taskId', [
-  param('taskId').isUUID().withMessage('taskId must be a valid UUID'),
+  param('taskId').custom(isCuid).withMessage('taskId must be a valid ID'),
   body('content')
     .trim()
     .isLength({ min: 1, max: 1000 })
@@ -36,7 +41,7 @@ router.post('/task/:taskId', [
  * @access  Private
  */
 router.get('/task/:taskId', [
-  param('taskId').isUUID().withMessage('taskId must be a valid UUID'),
+  param('taskId').custom(isCuid).withMessage('taskId must be a valid ID'),
   handleValidationErrors,
 ], getTaskComments);
 
@@ -46,7 +51,7 @@ router.get('/task/:taskId', [
  * @access  Private (Comment author only)
  */
 router.put('/:commentId', [
-  param('commentId').isUUID().withMessage('commentId must be a valid UUID'),
+  param('commentId').custom(isCuid).withMessage('commentId must be a valid ID'),
   body('content')
     .trim()
     .isLength({ min: 1, max: 1000 })
@@ -60,7 +65,7 @@ router.put('/:commentId', [
  * @access  Private (Comment author, Admin, or Manager)
  */
 router.delete('/:commentId', [
-  param('commentId').isUUID().withMessage('commentId must be a valid UUID'),
+  param('commentId').custom(isCuid).withMessage('commentId must be a valid ID'),
   handleValidationErrors,
 ], deleteComment);
 

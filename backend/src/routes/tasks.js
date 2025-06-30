@@ -13,6 +13,11 @@ const {
 } = require('../middleware/validation');
 const { body, query, param } = require('express-validator');
 
+// Custom CUID validator
+const isCuid = (value) => {
+  return /^c[a-z0-9]{24}$/.test(value);
+};
+
 const router = express.Router();
 
 // All routes require authentication
@@ -25,8 +30,8 @@ router.use(authenticate);
  */
 router.post('/', [
   body('projectId')
-    .isUUID()
-    .withMessage('Project ID must be a valid UUID'),
+    .custom(isCuid)
+    .withMessage('Project ID must be a valid ID'),
   body('title')
     .trim()
     .isLength({ min: 3, max: 200 })
@@ -46,8 +51,8 @@ router.post('/', [
     .withMessage('Due date must be a valid date'),
   body('assigneeId')
     .optional()
-    .isUUID()
-    .withMessage('Assignee ID must be a valid UUID'),
+    .custom(isCuid)
+    .withMessage('Assignee ID must be a valid ID'),
   handleValidationErrors,
 ], createTask);
 
@@ -74,15 +79,15 @@ router.get('/', [
  * @access  Private
  */
 router.get('/project/:projectId', [
-  param('projectId').isUUID().withMessage('projectId must be a valid UUID'),
+  param('projectId').custom(isCuid).withMessage('projectId must be a valid ID'),
   query('status')
     .optional()
     .isIn(['TODO', 'IN_PROGRESS', 'DONE'])
     .withMessage('Status must be TODO, IN_PROGRESS, or DONE'),
   query('assigneeId')
     .optional()
-    .isUUID()
-    .withMessage('Assignee ID must be a valid UUID'),
+    .custom(isCuid)
+    .withMessage('Assignee ID must be a valid ID'),
   query('priority')
     .optional()
     .isIn(['LOW', 'MEDIUM', 'HIGH', 'URGENT'])
@@ -96,7 +101,7 @@ router.get('/project/:projectId', [
  * @access  Private
  */
 router.get('/:taskId', [
-  param('taskId').isUUID().withMessage('taskId must be a valid UUID'),
+  param('taskId').custom(isCuid).withMessage('taskId must be a valid ID'),
   handleValidationErrors,
 ], getTaskById);
 
@@ -106,7 +111,7 @@ router.get('/:taskId', [
  * @access  Private
  */
 router.put('/:taskId', [
-  param('taskId').isUUID().withMessage('taskId must be a valid UUID'),
+  param('taskId').custom(isCuid).withMessage('taskId must be a valid ID'),
   body('title')
     .optional()
     .trim()
@@ -131,8 +136,8 @@ router.put('/:taskId', [
     .withMessage('Due date must be a valid date'),
   body('assigneeId')
     .optional()
-    .isUUID()
-    .withMessage('Assignee ID must be a valid UUID'),
+    .custom(isCuid)
+    .withMessage('Assignee ID must be a valid ID'),
   handleValidationErrors,
 ], updateTask);
 
@@ -142,7 +147,7 @@ router.put('/:taskId', [
  * @access  Private
  */
 router.delete('/:taskId', [
-  param('taskId').isUUID().withMessage('taskId must be a valid UUID'),
+  param('taskId').custom(isCuid).withMessage('taskId must be a valid ID'),
   handleValidationErrors,
 ], deleteTask);
 
