@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, FolderOpen, Calendar, Users, MoreHorizontal, Loader2 } from 'lucide-react';
+import { Plus, FolderOpen, Calendar, Users, MoreHorizontal, Loader2, Edit, Trash2, UserPlus } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { fetchProjects } from '../../store/slices/projectsSlice';
 import { fetchTeams } from '../../store/slices/teamsSlice';
 import CreateProjectModal from '../../components/Projects/CreateProjectModal';
-import { canCreateAnyProject } from '../../utils/permissions';
+import EditProjectModal from '../../components/Projects/EditProjectModal';
+import DeleteProjectModal from '../../components/Projects/DeleteProjectModal';
+import { canCreateAnyProject, canManageProject } from '../../utils/permissions';
 
 const ProjectsPage: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -13,6 +15,10 @@ const ProjectsPage: React.FC = () => {
   const { projects, isLoading, error } = useAppSelector((state) => state.projects);
   const { teams } = useAppSelector((state) => state.teams);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<any>(null);
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'completed' | 'on_hold'>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -20,6 +26,34 @@ const ProjectsPage: React.FC = () => {
     dispatch(fetchProjects());
     dispatch(fetchTeams());
   }, [dispatch]);
+
+  // Click outside handler for dropdown
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setActiveDropdown(null);
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  // Handler functions
+  const handleEditProject = (project: any) => {
+    setSelectedProject(project);
+    setIsEditModalOpen(true);
+    setActiveDropdown(null);
+  };
+
+  const handleDeleteProject = (project: any) => {
+    setSelectedProject(project);
+    setIsDeleteModalOpen(true);
+    setActiveDropdown(null);
+  };
+
+  const handleManageMembers = (project: any) => {
+    navigate(`/projects/${project.id}?tab=members`);
+    setActiveDropdown(null);
+  };
 
   // Ensure data is always arrays
   const safeProjects = Array.isArray(projects) ? projects : [];
@@ -181,9 +215,55 @@ const ProjectsPage: React.FC = () => {
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(project.isActive)}`}>
                     {project.isActive ? 'Active' : 'Inactive'}
                   </span>
-                  <button className="p-1 hover:bg-gray-100 rounded transition-colors">
-                    <MoreHorizontal className="h-4 w-4 text-gray-500" />
-                  </button>
+
+                  {/* Project Actions Dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveDropdown(activeDropdown === project.id ? null : project.id);
+                      }}
+                      className="p-1 hover:bg-gray-100 rounded transition-colors"
+                    >
+                      <MoreHorizontal className="h-4 w-4 text-gray-500" />
+                    </button>
+
+                    {activeDropdown === project.id && (
+                      <div className="absolute right-0 top-8 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                        {canManageProject(project) && (
+                          <>
+                            <button
+                              onClick={() => handleEditProject(project)}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
+                            >
+                              <Edit className="h-4 w-4" />
+                              <span>Edit Project</span>
+                            </button>
+                            <button
+                              onClick={() => handleManageMembers(project)}
+                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
+                            >
+                              <UserPlus className="h-4 w-4" />
+                              <span>Manage Members</span>
+                            </button>
+                            <hr className="my-1" />
+                            <button
+                              onClick={() => handleDeleteProject(project)}
+                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span>Delete Project</span>
+                            </button>
+                          </>
+                        )}
+                        {!canManageProject(project) && (
+                          <div className="px-4 py-2 text-sm text-gray-500">
+                            No actions available
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -315,6 +395,20 @@ const ProjectsPage: React.FC = () => {
       <CreateProjectModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
+      />
+
+      {/* Edit Project Modal */}
+      <EditProjectModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        project={selectedProject}
+      />
+
+      {/* Delete Project Modal */}
+      <DeleteProjectModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        project={selectedProject}
       />
     </div>
   );

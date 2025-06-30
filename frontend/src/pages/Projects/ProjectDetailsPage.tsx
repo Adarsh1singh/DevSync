@@ -127,7 +127,17 @@ const ProjectDetailsPage: React.FC = () => {
 
   // Filter tasks based on current filter and search
   const filteredTasks = projectTasks.filter(task => {
-    const matchesFilter = taskFilter === 'all' || task.status.toLowerCase() === taskFilter.replace('_', '_');
+    let matchesFilter = false;
+    if (taskFilter === 'all') {
+      matchesFilter = true;
+    } else if (taskFilter === 'todo') {
+      matchesFilter = task.status === 'TODO';
+    } else if (taskFilter === 'in_progress') {
+      matchesFilter = task.status === 'IN_PROGRESS';
+    } else if (taskFilter === 'done') {
+      matchesFilter = task.status === 'DONE';
+    }
+
     const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          task.description?.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesFilter && matchesSearch;
@@ -236,7 +246,7 @@ const ProjectDetailsPage: React.FC = () => {
               <UserPlus className="h-4 w-4" />
               <span>Add Member</span>
             </button>
-            <div className="relative">
+            <div className="flex items-center space-x-2">
               <button
                 onClick={() => setIsEditModalOpen(true)}
                 className="flex items-center space-x-2 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
@@ -246,7 +256,7 @@ const ProjectDetailsPage: React.FC = () => {
               </button>
               <button
                 onClick={() => setIsDeleteModalOpen(true)}
-                className="flex items-center space-x-2 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors ml-2"
+                className="flex items-center space-x-2 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
               >
                 <Trash2 className="h-4 w-4" />
                 <span>Delete</span>

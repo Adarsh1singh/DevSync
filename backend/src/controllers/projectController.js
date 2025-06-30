@@ -686,12 +686,12 @@ const deleteProject = async (req, res) => {
     const { projectId } = req.params;
     const userId = req.user.id;
 
-    // Check if user is admin/lead of the project or team admin
+    // Check if user is admin/manager of the project or team admin
     const projectMember = await prisma.projectMember.findFirst({
       where: {
         projectId,
         userId,
-        role: { in: ['ADMIN', 'LEAD'] },
+        role: { in: ['ADMIN', 'MANAGER'] },
       },
     });
 

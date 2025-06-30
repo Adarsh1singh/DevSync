@@ -1,46 +1,8 @@
-import axios from 'axios';
-// import { LoginCredentials, RegisterData, User, AuthResponse } from '../types/auth';
+import { api } from './api';
 import type { AuthResponse } from '../types';
 import type { RegisterData } from '../types';
 import type { User } from '../types';
 import type { LoginCredentials } from '../types';
-
-
-const API_URL = import.meta.env.VITE_API_URL;
-
-// Create axios instance
-const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Request interceptor to add auth token
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Response interceptor to handle auth errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
 
 export const authService = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
@@ -68,4 +30,4 @@ export const authService = {
   },
 };
 
-export { api };
+
