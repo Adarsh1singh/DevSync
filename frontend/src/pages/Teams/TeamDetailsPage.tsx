@@ -56,7 +56,7 @@ const TeamDetailsPage: React.FC = () => {
   useEffect(() => {
     dispatch(fetchTeams());
     dispatch(fetchProjects());
-    dispatch(fetchTasks());
+    dispatch(fetchTasks({}));
   }, [dispatch]);
 
   // Fetch team activity when team changes

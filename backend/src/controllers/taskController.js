@@ -73,6 +73,13 @@ const createTask = async (req, res) => {
             name: true,
           },
         },
+        labels: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+          },
+        },
         _count: {
           select: {
             comments: true,
@@ -108,7 +115,7 @@ const createTask = async (req, res) => {
 const getProjectTasks = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { status, assigneeId, priority } = req.query;
+    const { status, assigneeId, priority, search, dueDate } = req.query;
     const userId = req.user.id;
 
     // Check if user is a member of the project
@@ -136,6 +143,17 @@ const getProjectTasks = async (req, res) => {
     }
     if (priority) {
       whereClause.priority = priority;
+    }
+    if (dueDate) {
+      whereClause.dueDate = {
+        lte: new Date(dueDate),
+      };
+    }
+    if (search) {
+      whereClause.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
     const tasks = await prisma.task.findMany({
@@ -353,6 +371,13 @@ const updateTask = async (req, res) => {
             name: true,
           },
         },
+        labels: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+          },
+        },
         _count: {
           select: {
             comments: true,
@@ -466,20 +491,65 @@ const deleteTask = async (req, res) => {
 const getUserTasks = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { status, priority } = req.query;
+    const { status, priority, search, projectId, dueDate } = req.query;
 
-    const whereClause = { assigneeId: userId };
+    const whereClause = {
+      AND: [
+        {
+          OR: [
+            { assigneeId: userId },
+            { createdById: userId },
+            {
+              project: {
+                members: {
+                  some: {
+                    userId,
+                  },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
 
     if (status) {
-      whereClause.status = status;
+      whereClause.AND.push({ status });
     }
     if (priority) {
-      whereClause.priority = priority;
+      whereClause.AND.push({ priority });
+    }
+    if (projectId) {
+      whereClause.AND.push({ projectId });
+    }
+    if (dueDate) {
+      whereClause.AND.push({
+        dueDate: {
+          lte: new Date(dueDate),
+        },
+      });
+    }
+    if (search) {
+      whereClause.AND.push({
+        OR: [
+          { title: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } },
+        ],
+      });
     }
 
     const tasks = await prisma.task.findMany({
       where: whereClause,
       include: {
+        assignee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            avatar: true,
+          },
+        },
         project: {
           select: {
             id: true,
@@ -497,6 +567,13 @@ const getUserTasks = async (req, res) => {
             id: true,
             firstName: true,
             lastName: true,
+          },
+        },
+        labels: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
           },
         },
         _count: {

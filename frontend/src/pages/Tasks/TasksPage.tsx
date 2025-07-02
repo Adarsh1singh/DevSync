@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Filter, Search, Calendar, User, Loader2 } from 'lucide-react';
+import { Plus, LayoutGrid, List, Loader2, BarChart3 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { fetchTasks, updateTask } from '../../store/slices/tasksSlice';
+import { fetchTasks, updateTask, setFilters } from '../../store/slices/tasksSlice';
 import CreateTaskModal from '../../components/Tasks/CreateTaskModal';
+import TaskDetailModal from '../../components/Tasks/TaskDetailModal';
+import TaskCard from '../../components/Tasks/TaskCard';
+import TaskFilters from '../../components/Tasks/TaskFilters';
+import TaskAnalytics from '../../components/Tasks/TaskAnalytics';
 import {
   DndContext,
   DragOverlay,
@@ -19,15 +23,19 @@ import {
 } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { toast } from 'react-hot-toast';
 import type { Task } from '../../types';
+import type { TaskFilters as TaskFiltersType } from '../../services/tasksService';
 
 const TasksPage: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { tasks, isLoading, error } = useAppSelector((state) => state.tasks);
-  const [view, setView] = useState<'list' | 'kanban'>('kanban');
+  const { tasks, isLoading, error, filters } = useAppSelector((state) => state.tasks);
+  const [view, setView] = useState<'list' | 'kanban' | 'analytics'>('kanban');
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createTaskStatus, setCreateTaskStatus] = useState<'TODO' | 'IN_PROGRESS' | 'DONE'>('TODO');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -39,8 +47,8 @@ const TasksPage: React.FC = () => {
   );
 
   useEffect(() => {
-    dispatch(fetchTasks());
-  }, [dispatch]);
+    dispatch(fetchTasks(filters));
+  }, [dispatch, filters]);
 
   // Ensure tasks is always an array
   const safeTasks = Array.isArray(tasks) ? tasks : [];
@@ -60,7 +68,7 @@ const TasksPage: React.FC = () => {
   };
 
   // Handle drag end
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveTask(null);
 
@@ -71,11 +79,25 @@ const TasksPage: React.FC = () => {
 
     const task = safeTasks.find(t => t.id === taskId);
     if (task && task.status !== newStatus) {
-      dispatch(updateTask({
-        taskId,
-        taskData: { status: newStatus }
-      }));
+      try {
+        await dispatch(updateTask({
+          taskId,
+          taskData: { status: newStatus }
+        })).unwrap();
+        toast.success(`Task moved to ${newStatus.replace('_', ' ').toLowerCase()}`);
+      } catch (error) {
+        toast.error('Failed to update task status');
+      }
     }
+  };
+
+  const handleTaskClick = (taskId: string) => {
+    setSelectedTaskId(taskId);
+    setIsTaskDetailOpen(true);
+  };
+
+  const handleFiltersChange = (newFilters: TaskFiltersType) => {
+    dispatch(setFilters(newFilters));
   };
 
   if (isLoading) {
@@ -92,7 +114,7 @@ const TasksPage: React.FC = () => {
         <div className="text-center">
           <p className="text-red-600 mb-4">{error}</p>
           <button
-            onClick={() => dispatch(fetchTasks())}
+            onClick={() => dispatch(fetchTasks({}))}
             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
           >
             Try Again
@@ -101,21 +123,6 @@ const TasksPage: React.FC = () => {
       </div>
     );
   }
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'LOW':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'MEDIUM':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'HIGH':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'URGENT':
-        return 'bg-red-200 text-red-900 border-red-300';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
 
   // Sortable Task Card Component
   const SortableTaskCard = ({ task }: { task: Task }) => {
@@ -131,7 +138,6 @@ const TasksPage: React.FC = () => {
     const style = {
       transform: CSS.Transform.toString(transform),
       transition,
-      opacity: isDragging ? 0.5 : 1,
     };
 
     return (
@@ -140,59 +146,13 @@ const TasksPage: React.FC = () => {
         style={style}
         {...attributes}
         {...listeners}
-        className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
       >
-        {/* Task Header */}
-        <div className="flex items-start justify-between mb-3">
-          <h3 className="font-medium text-gray-900 text-sm line-clamp-2">{task.title}</h3>
-          <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(task.priority)}`}>
-            {task.priority}
-          </span>
-        </div>
-
-        {/* Task Description */}
-        {task.description && (
-          <p className="text-gray-600 text-xs mb-3 line-clamp-2">{task.description}</p>
-        )}
-
-        {/* Task Labels */}
-        {task.labels && task.labels.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
-            {task.labels.map((label: any, index: number) => (
-              <span
-                key={index}
-                className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full"
-              >
-                {typeof label === 'string' ? label : label.name}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Task Footer */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <div className="flex items-center space-x-2">
-            {task.assignee && (
-              <div className="flex items-center space-x-1">
-                <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                  <User className="h-3 w-3 text-white" />
-                </div>
-                <span>
-                  {task.assignee.firstName} {task.assignee.lastName}
-                </span>
-              </div>
-            )}
-            {task.project && (
-              <span className="text-xs text-gray-400">• {task.project.name}</span>
-            )}
-          </div>
-          {task.dueDate && (
-            <div className="flex items-center space-x-1">
-              <Calendar className="h-3 w-3" />
-              <span>{new Date(task.dueDate).toLocaleDateString()}</span>
-            </div>
-          )}
-        </div>
+        <TaskCard
+          task={task}
+          onClick={() => handleTaskClick(task.id)}
+          isDragging={isDragging}
+          className="cursor-grab active:cursor-grabbing"
+        />
       </div>
     );
   };
@@ -256,16 +216,48 @@ const TasksPage: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Tasks</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-3xl font-bold text-gray-900">Tasks</h1>
+          <p className="text-gray-600 mt-2">
             Manage and track your tasks across all projects.
           </p>
         </div>
         <div className="flex items-center space-x-3">
-          <button className="flex items-center space-x-2 border border-border px-4 py-2 rounded-lg hover:bg-accent transition-colors">
-            <Filter className="h-4 w-4" />
-            <span>Filter</span>
-          </button>
+          {/* View Toggle */}
+          <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+            <button
+              onClick={() => setView('kanban')}
+              className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
+                view === 'kanban'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <LayoutGrid className="h-4 w-4 mr-1 inline" />
+              Kanban
+            </button>
+            <button
+              onClick={() => setView('list')}
+              className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
+                view === 'list'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <List className="h-4 w-4 mr-1 inline" />
+              List
+            </button>
+            <button
+              onClick={() => setView('analytics')}
+              className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
+                view === 'analytics'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4 mr-1 inline" />
+              Analytics
+            </button>
+          </div>
           <button
             onClick={() => {
               setCreateTaskStatus('TODO');
@@ -279,42 +271,8 @@ const TasksPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center justify-between">
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search tasks..."
-            className="pl-10 pr-4 py-2 w-80 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-          />
-        </div>
-
-        {/* View Toggle */}
-        <div className="flex space-x-1 bg-muted p-1 rounded-lg">
-          <button
-            onClick={() => setView('kanban')}
-            className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
-              view === 'kanban'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Kanban
-          </button>
-          <button
-            onClick={() => setView('list')}
-            className={`px-3 py-1 text-sm font-medium rounded transition-colors ${
-              view === 'list'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            List
-          </button>
-        </div>
-      </div>
+      {/* Filters */}
+      <TaskFilters onFiltersChange={handleFiltersChange} />
 
       {/* Kanban Board */}
       {view === 'kanban' && (
@@ -349,12 +307,11 @@ const TasksPage: React.FC = () => {
 
           <DragOverlay>
             {activeTask ? (
-              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-lg rotate-3">
-                <h3 className="font-medium text-gray-900 text-sm">{activeTask.title}</h3>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(activeTask.priority)}`}>
-                  {activeTask.priority}
-                </span>
-              </div>
+              <TaskCard
+                task={activeTask}
+                isDragging={true}
+                className="shadow-lg rotate-3"
+              />
             ) : null}
           </DragOverlay>
         </DndContext>
@@ -362,37 +319,38 @@ const TasksPage: React.FC = () => {
 
       {/* List View */}
       {view === 'list' && (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-border">
-            <h2 className="font-semibold text-foreground">All Tasks</h2>
-          </div>
-          <div className="divide-y divide-border">
-            {safeTasks.map((task) => (
-              <div key={task.id} className="px-6 py-4 hover:bg-accent/50 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3">
-                      <h3 className="font-medium text-foreground">{task.title}</h3>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(task.priority)}`}>
-                        {task.priority}
-                      </span>
-                    </div>
-                    <p className="text-muted-foreground text-sm mt-1">{task.description}</p>
-                    <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                      <span>{task.project?.name || 'No Project'}</span>
-                      {task.assignee && (
-                        <span>{task.assignee.firstName} {task.assignee.lastName}</span>
-                      )}
-                      {task.dueDate && (
-                        <span>{new Date(task.dueDate).toLocaleDateString()}</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {safeTasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              onClick={() => handleTaskClick(task.id)}
+            />
+          ))}
+          {safeTasks.length === 0 && (
+            <div className="col-span-full text-center py-12">
+              <div className="text-gray-400 mb-4">
+                <Plus className="h-12 w-12 mx-auto" />
               </div>
-            ))}
-          </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No tasks found</h3>
+              <p className="text-gray-600 mb-4">Get started by creating your first task.</p>
+              <button
+                onClick={() => {
+                  setCreateTaskStatus('TODO');
+                  setIsCreateModalOpen(true);
+                }}
+                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Create Task
+              </button>
+            </div>
+          )}
         </div>
+      )}
+
+      {/* Analytics View */}
+      {view === 'analytics' && (
+        <TaskAnalytics />
       )}
 
       {/* Create Task Modal */}
@@ -401,6 +359,18 @@ const TasksPage: React.FC = () => {
         onClose={() => setIsCreateModalOpen(false)}
         defaultStatus={createTaskStatus}
       />
+
+      {/* Task Detail Modal */}
+      {selectedTaskId && (
+        <TaskDetailModal
+          isOpen={isTaskDetailOpen}
+          onClose={() => {
+            setIsTaskDetailOpen(false);
+            setSelectedTaskId(null);
+          }}
+          taskId={selectedTaskId}
+        />
+      )}
     </div>
   );
 };

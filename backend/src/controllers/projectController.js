@@ -31,6 +31,16 @@ const createProject = async (req, res) => {
       });
     }
 
+    // Get all team members to add them to the project
+    const teamMembers = await prisma.teamMember.findMany({
+      where: {
+        teamId,
+      },
+      include: {
+        user: true,
+      },
+    });
+
     const project = await prisma.project.create({
       data: {
         name,
@@ -38,10 +48,10 @@ const createProject = async (req, res) => {
         teamId,
         createdById: userId,
         members: {
-          create: {
-            userId,
-            role: teamMember.role,
-          },
+          create: teamMembers.map(member => ({
+            userId: member.userId,
+            role: member.role,
+          })),
         },
       },
       include: {
@@ -629,7 +639,7 @@ const getProjectActivity = async (req, res) => {
         },
       },
       include: {
-        author: {
+        user: {
           select: {
             firstName: true,
             lastName: true,
@@ -651,8 +661,8 @@ const getProjectActivity = async (req, res) => {
       activities.push({
         id: `comment-${comment.id}`,
         type: 'comment_added',
-        message: `${comment.author.firstName} ${comment.author.lastName} commented on "${comment.task.title}"`,
-        user: `${comment.author.firstName} ${comment.author.lastName}`,
+        message: `${comment.user.firstName} ${comment.user.lastName} commented on "${comment.task.title}"`,
+        user: `${comment.user.firstName} ${comment.user.lastName}`,
         timestamp: comment.createdAt,
         metadata: {
           commentId: comment.id,

@@ -9,6 +9,7 @@ import { fetchProject } from '../../store/slices/projectsSlice';
 import { fetchTasks } from '../../store/slices/tasksSlice';
 import { projectsService } from '../../services/projectsService';
 import { canManageProject } from '../../utils/permissions';
+import { socketService } from '../../services/socketService';
 import EditProjectModal from '../../components/Projects/EditProjectModal';
 import DeleteProjectModal from '../../components/Projects/DeleteProjectModal';
 import AddProjectMemberModal from '../../components/Projects/AddProjectMemberModal';
@@ -57,8 +58,18 @@ const ProjectDetailsPage: React.FC = () => {
   useEffect(() => {
     if (projectId) {
       dispatch(fetchProject(projectId));
-      dispatch(fetchTasks());
+      dispatch(fetchTasks({}));
+
+      // Join the project room for real-time updates
+      socketService.joinProject(projectId);
     }
+
+    // Cleanup: leave project room when component unmounts or projectId changes
+    return () => {
+      if (projectId) {
+        socketService.leaveProject(projectId);
+      }
+    };
   }, [dispatch, projectId]);
 
   useEffect(() => {
@@ -662,7 +673,7 @@ const ProjectDetailsPage: React.FC = () => {
         isOpen={isCreateTaskModalOpen}
         onClose={() => {
           setIsCreateTaskModalOpen(false);
-          dispatch(fetchTasks());
+          dispatch(fetchTasks({}));
         }}
         project={currentProject}
       />
@@ -672,7 +683,7 @@ const ProjectDetailsPage: React.FC = () => {
           isOpen={editTaskModal.isOpen}
           onClose={() => {
             setEditTaskModal({ isOpen: false, task: null });
-            dispatch(fetchTasks());
+            dispatch(fetchTasks({}));
           }}
           task={editTaskModal.task}
           project={currentProject}

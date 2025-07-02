@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast';
 import { store } from './store';
 import { useAppDispatch, useAppSelector } from './store';
 import { getProfile } from './store/slices/authSlice';
+import { socketService } from './services/socketService';
 
 // Components
 import Layout from './components/Layout/Layout';
@@ -24,13 +25,27 @@ import ProfilePage from './pages/Profile/ProfilePage';
 
 function AppContent() {
   const dispatch = useAppDispatch();
-  const { isAuthenticated, token } = useAppSelector((state) => state.auth);
+  const { isAuthenticated, token, user } = useAppSelector((state) => state.auth);
 
   useEffect(() => {
     if (token && !isAuthenticated) {
       dispatch(getProfile());
     }
   }, [dispatch, token, isAuthenticated]);
+
+  // Initialize socket connection when user is authenticated
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      socketService.connect(user.id);
+    } else {
+      socketService.disconnect();
+    }
+
+    // Cleanup on unmount
+    return () => {
+      socketService.disconnect();
+    };
+  }, [isAuthenticated, user]);
 
   return (
     <Router>

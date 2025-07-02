@@ -1,9 +1,9 @@
 const express = require('express');
 const {
-  createComment,
+  createTaskComment,
   getTaskComments,
   updateComment,
-  deleteComment,
+  deleteTaskComment,
 } = require('../controllers/commentController');
 const { authenticate } = require('../middleware/auth');
 const {
@@ -33,7 +33,7 @@ router.post('/task/:taskId', [
     .isLength({ min: 1, max: 1000 })
     .withMessage('Comment content must be between 1 and 1000 characters'),
   handleValidationErrors,
-], createComment);
+], createTaskComment);
 
 /**
  * @route   GET /api/comments/task/:taskId
@@ -67,6 +67,6 @@ router.put('/:commentId', [
 router.delete('/:commentId', [
   param('commentId').custom(isCuid).withMessage('commentId must be a valid ID'),
   handleValidationErrors,
-], deleteComment);
+], deleteTaskComment);
 
 module.exports = router;

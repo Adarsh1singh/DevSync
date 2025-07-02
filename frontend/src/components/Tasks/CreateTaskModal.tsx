@@ -217,9 +217,8 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 <option value="">Unassigned</option>
                 {formData.projectId && (() => {
                   const selectedProject = Array.isArray(projects) && projects.find(p => p.id === formData.projectId);
-                  const projectTeam = selectedProject && Array.isArray(teams) && teams.find(t => t.id === selectedProject.teamId);
 
-                  return projectTeam?.members?.map((member) => (
+                  return selectedProject?.members?.map((member) => (
                     <option key={member.user.id} value={member.user.id}>
                       {member.user.firstName} {member.user.lastName} ({member.role})
                     </option>
@@ -227,7 +226,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 })()}
               </select>
               <p className="mt-1 text-xs text-gray-500">
-                {formData.projectId ? 'Select from project team members' : 'Select a project first to see team members'}
+                {formData.projectId ? 'Select from project members' : 'Select a project first to see project members'}
               </p>
             </div>
           </div>

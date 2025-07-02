@@ -1,13 +1,13 @@
 import React from 'react';
-import { Bell, Search, Settings, User, LogOut, Menu } from 'lucide-react';
+import { Search, Settings, User, LogOut, Menu } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { logout } from '../../store/slices/authSlice';
 import { toggleSidebar } from '../../store/slices/uiSlice';
+import NotificationsDropdown from './NotificationsDropdown';
 
 const Header: React.FC = () => {
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
-  const { unreadCount } = useAppSelector((state) => state.notifications);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -43,14 +43,7 @@ const Header: React.FC = () => {
         {/* Right side */}
         <div className="flex items-center space-x-4">
           {/* Notifications */}
-          <button className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
-            <Bell className="h-5 w-5" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </button>
+          <NotificationsDropdown />
 
           {/* Settings */}
           <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">

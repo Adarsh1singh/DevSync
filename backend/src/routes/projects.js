@@ -124,4 +124,49 @@ router.get('/:projectId/activity', [
   handleValidationErrors,
 ], getProjectActivity);
 
+// Label routes
+const {
+  getProjectLabels,
+  createProjectLabel,
+  deleteProjectLabel,
+} = require('../controllers/labelController');
+
+/**
+ * @route   GET /api/projects/:projectId/labels
+ * @desc    Get labels for a project
+ * @access  Private (Project Member only)
+ */
+router.get('/:projectId/labels', [
+  param('projectId').custom(isCuid).withMessage('projectId must be a valid ID'),
+  handleValidationErrors,
+], getProjectLabels);
+
+/**
+ * @route   POST /api/projects/:projectId/labels
+ * @desc    Create a label for a project
+ * @access  Private (Project Admin/Manager only)
+ */
+router.post('/:projectId/labels', [
+  param('projectId').custom(isCuid).withMessage('projectId must be a valid ID'),
+  body('name')
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('Label name must be between 1 and 50 characters'),
+  body('color')
+    .matches(/^#[0-9A-F]{6}$/i)
+    .withMessage('Color must be a valid hex color'),
+  handleValidationErrors,
+], createProjectLabel);
+
+/**
+ * @route   DELETE /api/projects/:projectId/labels/:labelId
+ * @desc    Delete a project label
+ * @access  Private (Project Admin/Manager only)
+ */
+router.delete('/:projectId/labels/:labelId', [
+  param('projectId').custom(isCuid).withMessage('projectId must be a valid ID'),
+  param('labelId').custom(isCuid).withMessage('labelId must be a valid ID'),
+  handleValidationErrors,
+], deleteProjectLabel);
+
 module.exports = router;

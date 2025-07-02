@@ -15,7 +15,7 @@ const DashboardPage: React.FC = () => {
   useEffect(() => {
     dispatch(fetchTeams());
     dispatch(fetchProjects());
-    dispatch(fetchTasks());
+    dispatch(fetchTasks({}));
   }, [dispatch]);
 
   // Ensure data is always arrays
@@ -70,7 +70,7 @@ const DashboardPage: React.FC = () => {
   ];
 
   // Get recent tasks (last 5 updated tasks)
-  const recentTasks = safeTasks
+  const recentTasks = [...safeTasks]
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .slice(0, 5)
     .map(task => ({
